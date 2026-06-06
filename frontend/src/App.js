@@ -1,4 +1,3 @@
-// frontend/src/App.js
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
@@ -9,14 +8,16 @@ function App() {
   const [donors, setDonors] = useState([]);
   const [shortage, setShortage] = useState(null);
   const [patients, setPatients] = useState([]);
+  const [urgentPatients, setUrgentPatients] = useState([]);
   const [selectedBloodGroup, setSelectedBloodGroup] = useState('O Positive');
   const [maxDistance, setMaxDistance] = useState(5);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [checkedInDonors, setCheckedInDonors] = useState({});
 
   const fetchStats = async () => {
     try {
-      const res = await axios.get(`${API_URL}/coordinator/statistics`);
+      const res = await axios.get(API_URL + '/coordinator/statistics');
       setStats(res.data);
     } catch (error) {
       console.log('Error fetching stats:', error);
@@ -26,7 +27,7 @@ function App() {
   const fetchNearbyDonors = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API_URL}/match/donors/nearby`, {
+      const res = await axios.get(API_URL + '/match/donors/nearby', {
         params: {
           blood_group: selectedBloodGroup,
           max_distance_km: maxDistance,
@@ -34,7 +35,7 @@ function App() {
         }
       });
       setDonors(res.data.donors || []);
-      setMessage(`Found ${res.data.total_nearby_donors} donors within ${maxDistance}km`);
+      setMessage('Found ' + (res.data.total_nearby_donors || 0) + ' donors within ' + maxDistance + 'km');
     } catch (error) {
       console.log('Error fetching donors:', error);
       setMessage('Error fetching donors');
@@ -44,7 +45,7 @@ function App() {
 
   const fetchShortage = async () => {
     try {
-      const res = await axios.get(`${API_URL}/predict/shortage/${selectedBloodGroup}`);
+      const res = await axios.get(API_URL + '/predict/shortage/' + selectedBloodGroup);
       setShortage(res.data);
     } catch (error) {
       console.log('Error fetching shortage:', error);
@@ -53,8 +54,9 @@ function App() {
 
   const fetchPatients = async () => {
     try {
-      const res = await axios.get(`${API_URL}/predict/patients?days_ahead=7`);
+      const res = await axios.get(API_URL + '/predict/patients?days_ahead=7');
       setPatients(res.data.upcoming_list || []);
+      setUrgentPatients(res.data.urgent_list || []);
     } catch (error) {
       console.log('Error fetching patients:', error);
     }
@@ -63,15 +65,16 @@ function App() {
   const markCheckin = async (donorId, showedUp) => {
     try {
       const response = await axios.post(
-        `${API_URL}/coordinator/donor/checkin`,
+        API_URL + '/coordinator/donor/checkin',
         null,
         { params: { donor_id: donorId, showed_up: showedUp } }
       );
       
       if (response.data.success) {
-        setMessage(`Donor ${showedUp ? 'checked in' : 'marked as no-show'}. New score: ${response.data.new_reliability_score}`);
-        fetchNearbyDonors();
-        fetchStats();
+        setCheckedInDonors(prev => ({ ...prev, [donorId]: true }));
+        setMessage('Donor checked in. New score: ' + response.data.new_reliability_score);
+        await fetchNearbyDonors();
+        await fetchStats();
       }
     } catch (error) {
       console.log('Error marking checkin:', error);
@@ -82,14 +85,14 @@ function App() {
   const sendDonationRequest = async () => {
     setLoading(true);
     try {
-      const res = await axios.post(`${API_URL}/donation/send-to-nearby`, null, {
+      const res = await axios.post(API_URL + '/donation/send-to-nearby', null, {
         params: {
           blood_group: selectedBloodGroup,
           max_distance_km: maxDistance,
           donation_time: "Tomorrow, 10:00 AM"
         }
       });
-      setMessage(`${res.data.message}. Tier1: ${res.data.cascade?.tier1_count || 0} donors notified`);
+      setMessage(res.data.message + ' Tier1: ' + (res.data.cascade?.tier1_count || 0) + ' donors notified');
       fetchNearbyDonors();
     } catch (error) {
       console.log('Error sending request:', error);
@@ -214,7 +217,7 @@ function App() {
             <tbody>
               {donors.map((donor, index) => (
                 <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '10px' }}>{String(donor.user_id || '').substring(0, 20)}...</td>
+                  <td style={{ padding: '10px' }}>{(donor.user_id || '').substring(0, 20)}...</td>
                   <td style={{ padding: '10px' }}>{donor.distance_km || '?'} km</td>
                   <td style={{ padding: '10px' }}>
                     <span style={{ 
@@ -229,18 +232,26 @@ function App() {
                   <td style={{ padding: '10px' }}>{donor.donations_till_date || 0}</td>
                   <td style={{ padding: '10px' }}>{donor.phone_number || 'N/A'}</td>
                   <td style={{ padding: '10px' }}>
-                    <button 
-                      onClick={() => markCheckin(donor.user_id, true)} 
-                      style={{ backgroundColor: '#4caf50', color: 'white', border: 'none', padding: '5px 10px', marginRight: '5px', borderRadius: '3px', cursor: 'pointer' }}
-                    >
-                      Showed Up
-                    </button>
-                    <button 
-                      onClick={() => markCheckin(donor.user_id, false)} 
-                      style={{ backgroundColor: '#f44336', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '3px', cursor: 'pointer' }}
-                    >
-                      No Show
-                    </button>
+                    {checkedInDonors[donor.user_id] ? (
+                      <span style={{ backgroundColor: '#4caf50', color: 'white', padding: '5px 10px', borderRadius: '3px' }}>
+                        Done
+                      </span>
+                    ) : (
+                      <div>
+                        <button 
+                          onClick={() => markCheckin(donor.user_id, true)} 
+                          style={{ backgroundColor: '#4caf50', color: 'white', border: 'none', padding: '5px 10px', marginRight: '5px', borderRadius: '3px', cursor: 'pointer' }}
+                        >
+                          Showed Up
+                        </button>
+                        <button 
+                          onClick={() => markCheckin(donor.user_id, false)} 
+                          style={{ backgroundColor: '#f44336', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '3px', cursor: 'pointer' }}
+                        >
+                          No Show
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -251,32 +262,67 @@ function App() {
       </div>
 
       <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '10px' }}>
-        <h3>Patients Needing Blood (Next 7 Days)</h3>
-        {patients.length === 0 ? (
-          <p>No patients predicted to need blood in the next 7 days.</p>
+        <h3>Patients Needing Blood</h3>
+        {patients.length === 0 && urgentPatients.length === 0 ? (
+          <p>No patients predicted to need blood.</p>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f5f5f5' }}>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Patient ID</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Blood Group</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Days Until</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Status</th>
-               </tr>
-            </thead>
-            <tbody>
-              {patients.map((patient, index) => (
-                <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '10px' }}>{String(patient.patient_id || '').substring(0, 20)}...</td>
-                  <td style={{ padding: '10px' }}>{patient.blood_group}</td>
-                  <td style={{ padding: '10px', color: patient.days_until <= 2 ? 'red' : 'orange' }}>
-                    {patient.days_until} days
-                  </td>
-                  <td style={{ padding: '10px' }}>{patient.status || 'active'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div>
+            {urgentPatients.length > 0 && (
+              <div>
+                <h4 style={{ color: 'red' }}>URGENT - Overdue Patients ({urgentPatients.length})</h4>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#ffebee' }}>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Patient ID</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Blood Group</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Days Overdue</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Expected Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {urgentPatients.map((patient, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #eee', backgroundColor: '#fff5f5' }}>
+                        <td style={{ padding: '10px' }}>{(patient.patient_id || '').substring(0, 20)}...</td>
+                        <td style={{ padding: '10px' }}>{patient.blood_group}</td>
+                        <td style={{ padding: '10px', color: 'red', fontWeight: 'bold' }}>
+                          {Math.abs(patient.days_until)} days overdue
+                        </td>
+                        <td style={{ padding: '10px' }}>{patient.expected_date}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {patients.length > 0 && (
+              <div>
+                <h4>Upcoming Patients ({patients.length})</h4>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f5f5f5' }}>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Patient ID</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Blood Group</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Days Until</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Expected Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {patients.map((patient, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                        <td style={{ padding: '10px' }}>{(patient.patient_id || '').substring(0, 20)}...</td>
+                        <td style={{ padding: '10px' }}>{patient.blood_group}</td>
+                        <td style={{ padding: '10px', color: patient.days_until <= 2 ? 'red' : 'orange' }}>
+                          {patient.days_until} days
+                        </td>
+                        <td style={{ padding: '10px' }}>{patient.expected_date}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

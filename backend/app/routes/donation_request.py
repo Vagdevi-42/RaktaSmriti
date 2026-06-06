@@ -3,14 +3,11 @@ from fastapi import APIRouter
 from twilio.rest import Client
 from datetime import datetime
 from math import radians, sin, cos, sqrt, atan2
+from ..config import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMBER
 import boto3
 
 router = APIRouter(prefix="/api/donation", tags=["donation"])
 
-# YOUR CORRECT CREDENTIALS
-TWILIO_ACCOUNT_SID = "ACe74c319d295d672ea021bd93974e9773"
-TWILIO_AUTH_TOKEN = "9f43abc6aa023271c3165e9a20639c1e"
-TWILIO_WHATSAPP_NUMBER = "whatsapp:+14155238886"
 
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
@@ -71,6 +68,7 @@ def calculate_reliability_score(donor):
 async def send_donation_request():
     """Simple send to your number (for testing)"""
     try:
+        print("📨 Sending donation request to Twilio...")
         message = client.messages.create(
             body="""🩸 *URGENT: Blood Donation Request*
 
@@ -88,12 +86,14 @@ Reply:
             to="whatsapp:+917207190981"
         )
         
+        print(f"✅ Twilio donation request accepted. SID: {message.sid}")
         return {
             "success": True,
             "message": "Donation request sent!",
             "sid": message.sid
         }
     except Exception as e:
+        print(f"❌ Twilio donation request failed: {e}")
         return {"success": False, "error": str(e)}
 
 @router.post("/send-to-nearby")
@@ -162,6 +162,7 @@ async def send_to_nearby_donors(
             phone = donor.get('phone_number')
             if phone and phone != 'null' and phone != 'None':
                 try:
+                    print(f"📨 Sending donation request to donor {phone}...")
                     message = client.messages.create(
                         body=f"""🩸 *URGENT: Blood Donation Request*
 
@@ -180,6 +181,7 @@ Reply:
                         to=f"whatsapp:{phone}"
                     )
                     notified_count += 1
+                    print(f"✅ Twilio message accepted for {phone}. SID: {message.sid}")
                     
                     # Update donor notification status
                     table.update_item(

@@ -1,32 +1,52 @@
-# backend/app/routes/whatsapp_webhook.py
 from fastapi import APIRouter, Request
 from twilio.rest import Client
-from ..config.hospitals import get_hospital
+
+from ..config import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMBER
 
 router = APIRouter(prefix="/api/whatsapp", tags=["whatsapp"])
 
-# Twilio credentials
-TWILIO_ACCOUNT_SID = "ACe74c319d295d672ea021bd93974e9773"
-TWILIO_AUTH_TOKEN = "dc5fdb0f8cbce7ee447465eabfd8244e"
-TWILIO_WHATSAPP_NUMBER = "whatsapp:+14155238886"
-
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
+
+def get_hospital():
+    """Return the default hospital details used for donor confirmations."""
+    return {
+        "name": "City Blood Bank",
+        "address": "123 Main Road, Near Railway Station, City - 500001",
+        "latitude": 17.3922792,
+        "longitude": 78.4602749,
+        "phone": "+911234567890",
+    }
+
+def normalize_whatsapp_number(number: str) -> str:
+    """Normalize incoming Twilio WhatsApp numbers to a safe format."""
+    if not number:
+        return ""
+    cleaned = str(number).strip().replace("whatsapp:", "")
+    if not cleaned.startswith("+"):
+        cleaned = "+" + cleaned
+    return cleaned
+
+
 def send_whatsapp(to_number, message):
-    """Send WhatsApp message"""
-    client.messages.create(
-        body=message,
-        from_=TWILIO_WHATSAPP_NUMBER,
-        to=f"whatsapp:{to_number}"
-    )
+    """Send WhatsApp message and return a clear success/error result."""
+    try:
+        msg = client.messages.create(
+            body=message,
+            from_=TWILIO_WHATSAPP_NUMBER,
+            to=f"whatsapp:{normalize_whatsapp_number(to_number)}"
+        )
+        return True, msg.sid
+    except Exception as e:
+        return False, str(e)
 
 @router.post("/webhook")
 async def whatsapp_webhook(request: Request):
     """Handle donor's YES/NO reply"""
     try:
         form = await request.form()
-        reply = form.get('Body', '').upper().strip()
-        from_number = form.get('From', '').replace('whatsapp:', '')
+        reply = (form.get('Body') or '').upper().strip()
+        from_number = normalize_whatsapp_number(form.get('From'))
         
         print(f"📱 Donor replied: '{reply}'")
         
@@ -51,7 +71,7 @@ Please bring ID proof. Reach 30 minutes early.
 
 *You are a hero!* 🩸"""
             
-            send_whatsapp(from_number, donor_msg)
+            result1, sid1 = send_whatsapp(from_number, donor_msg)
             
             # Message 2: Patient confirmation (same number for demo)
             patient_msg = f"""🩸 *DONOR CONFIRMED!*
@@ -66,7 +86,13 @@ Please reach on time with your documents.
 
 *Stay strong!* 💪"""
             
-            send_whatsapp(from_number, patient_msg)
+            patient_number = normalize_whatsapp_number(hospital['phone']) or from_number
+            result2, sid2 = send_whatsapp(patient_number, patient_msg)
+
+            if not result1 or not result2:
+                return {"success": False, "donor_message_sent": result1, "patient_message_sent": result2, "donor_sid": sid1, "patient_sid": sid2}
+
+            return {"success": True, "donor_message_sent": True, "patient_message_sent": True, "donor_sid": sid1, "patient_sid": sid2}
             
         elif reply == 'NO':
             send_whatsapp(from_number, "❌ Thank you for letting us know. We'll find another donor.")

@@ -1,13 +1,9 @@
 # backend/app/routes/whatsapp_webhook.py
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 from twilio.rest import Client
+from ..config import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMBER, PATIENT_WHATSAPP_NUMBER
 
 router = APIRouter(prefix="/api/whatsapp", tags=["whatsapp"])
-
-# YOUR CORRECT CREDENTIALS
-TWILIO_ACCOUNT_SID = "ACe74c319d295d672ea021bd93974e9773"
-TWILIO_AUTH_TOKEN = "9f43abc6aa023271c3165e9a20639c1e"
-TWILIO_WHATSAPP_NUMBER = "whatsapp:+14155238886"
 
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
@@ -20,21 +16,39 @@ HOSPITAL = {
     "phone": "+911234567890"
 }
 
+def normalize_whatsapp_number(number: str) -> str:
+    """Normalize incoming Twilio WhatsApp numbers to a safe format."""
+    if not number:
+        return ""
+    cleaned = str(number).strip().replace("whatsapp:", "")
+    if not cleaned.startswith("+"):
+        cleaned = "+" + cleaned
+    return cleaned
+
+
 def send_whatsapp(to_number, message):
-    client.messages.create(
-        body=message,
-        from_=TWILIO_WHATSAPP_NUMBER,
-        to=f"whatsapp:{to_number}"
-    )
+    """Send WhatsApp message and return a clear success/error result."""
+    try:
+        formatted_to = normalize_whatsapp_number(to_number)
+        msg = client.messages.create(
+            body=message,
+            from_=TWILIO_WHATSAPP_NUMBER,
+            to=f"whatsapp:{formatted_to}"
+        )
+        print(f"✅ Message sent! SID: {msg.sid}")
+        return True, msg.sid
+    except Exception as e:
+        print(f"❌ Twilio send error: {e}")
+        return False, str(e)
 
 @router.post("/webhook")
 async def whatsapp_webhook(request: Request):
     try:
         form = await request.form()
-        reply = form.get('Body', '').upper().strip()
-        from_number = form.get('From', '').replace('whatsapp:', '')
+        reply = (form.get('Body') or '').upper().strip()
+        from_number = normalize_whatsapp_number(form.get('From'))
         
-        print(f"📱 Donor replied: '{reply}'")
+        print(f"📱 Donor replied: '{reply}' from {from_number}")
         
         if reply == 'YES':
             # Message 1: Donor confirmation
@@ -55,7 +69,7 @@ Please bring ID proof. Reach 30 minutes early.
 
 *You are a hero!* 🩸"""
             
-            send_whatsapp(from_number, donor_msg)
+            result1, sid1 = send_whatsapp(from_number, donor_msg)
             
             # Message 2: Patient confirmation
             patient_msg = f"""🩸 *DONOR CONFIRMED!*
@@ -70,15 +84,42 @@ Please reach on time with your documents.
 
 *Stay strong!* 💪"""
             
-            send_whatsapp(from_number, patient_msg)
+            patient_number = (
+                normalize_whatsapp_number(PATIENT_WHATSAPP_NUMBER)
+                or normalize_whatsapp_number(HOSPITAL['phone'])
+                or from_number
+            )
+            result2, sid2 = send_whatsapp(patient_number, patient_msg)
+
+            if not result1 or not result2:
+                return {
+                    "success": False,
+                    "donor_message_sent": result1,
+                    "patient_message_sent": result2,
+                    "donor_sid": sid1,
+                    "patient_sid": sid2,
+                }
+
+            return {
+                "success": True,
+                "donor_message_sent": True,
+                "patient_message_sent": True,
+                "donor_sid": sid1,
+                "patient_sid": sid2,
+            }
             
         elif reply == 'NO':
             send_whatsapp(from_number, "❌ Thank you for letting us know. We'll find another donor.")
+            return {"success": True}
         else:
             send_whatsapp(from_number, "🩸 Reply YES to confirm donation, or NO to decline.")
-        
-        return {"success": True}
+            return {"success": True}
         
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error in webhook: {e}")
         return {"success": False, "error": str(e)}
+
+@router.get("/webhook-status")
+async def whatsapp_webhook_status():
+    """Simple health/status route for the WhatsApp webhook."""
+    return {"message": "Webhook is active. Send POST requests with WhatsApp replies."}
