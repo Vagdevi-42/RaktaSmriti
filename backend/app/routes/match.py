@@ -200,3 +200,105 @@ async def donor_response(
         return {"success": True, "donor_id": donor_id, "response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    # Add this to your existing match.py (after your existing code)
+
+from math import radians, sin, cos, sqrt, atan2
+
+def calculate_distance(lat1, lon1, lat2, lon2):
+    """Calculate distance in kilometers"""
+    try:
+        lat1, lon1, lat2, lon2 = float(lat1), float(lon1), float(lat2), float(lon2)
+        R = 6371
+        lat1_rad = radians(lat1)
+        lat2_rad = radians(lat2)
+        delta_lat = radians(lat2 - lat1)
+        delta_lon = radians(lon2 - lon1)
+        
+        a = sin(delta_lat/2)**2 + cos(lat1_rad) * cos(lat2_rad) * sin(delta_lon/2)**2
+        c = 2 * atan2(sqrt(a), sqrt(1-a))
+        return R * c
+    except:
+        return 999
+
+def get_hospital(hospital_id="HOSPITAL_CITY"):
+    """Get hospital from database"""
+    try:
+        response = table.get_item(Key={'user_id': hospital_id})
+        return response.get('Item')
+    except:
+        return None
+
+@router.get("/donors/nearby")
+async def get_nearby_donors(
+    blood_group: str = Query(...),
+    hospital_id: str = Query("HOSPITAL_CITY"),
+    max_distance_km: float = Query(5, ge=1, le=50),
+    limit: int = Query(5, ge=1, le=20)
+):
+    """
+    Get donors by: blood group + active + eligible + WITHIN distance of hospital
+    Then sort by reliability score
+    """
+    try:
+        # First, get hospital
+        hospital = get_hospital(hospital_id)
+        if not hospital:
+            return {"success": False, "error": "Hospital not found"}
+        
+        hospital_lat = float(hospital.get('latitude', 0))
+        hospital_lon = float(hospital.get('longitude', 0))
+        
+        # Get all eligible donors (same as your existing logic)
+        response = table.scan(Limit=500)
+        all_donors = response.get('Items', [])
+        
+        eligible_donors = []
+        for donor in all_donors:
+            donor_bg = get_value(donor, 'blood_group')
+            donor_status = get_value(donor, 'status')
+            donor_eligibility = get_value(donor, 'eligibility_status')
+            
+            # Step 1-2: Blood group + Active + Eligible
+            if (donor_bg == blood_group and 
+                donor_status == 'active' and 
+                donor_eligibility == 'eligible'):
+                
+                # Step 3: Check distance
+                donor_lat = get_value(donor, 'latitude')
+                donor_lon = get_value(donor, 'longitude')
+                
+                if donor_lat and donor_lon:
+                    distance = calculate_distance(donor_lat, donor_lon, hospital_lat, hospital_lon)
+                    
+                    # Only include if within max_distance_km
+                    if distance <= max_distance_km:
+                        donor['distance_km'] = round(distance, 2)
+                        donor['reliability_score'] = calculate_reliability_score(donor)
+                        donor['blood_group'] = donor_bg
+                        eligible_donors.append(donor)
+        
+        # Step 4: Sort by reliability score (highest first)
+        eligible_donors.sort(key=lambda x: x.get('reliability_score', 0), reverse=True)
+        
+        # Step 5: Get cascade tiers
+        tier1, tier2, tier3, tier4 = get_cascade_tiers(eligible_donors)
+        
+        return {
+            "success": True,
+            "hospital": hospital.get('name'),
+            "hospital_location": {"lat": hospital_lat, "lon": hospital_lon},
+            "blood_group": blood_group,
+            "max_distance_km": max_distance_km,
+            "total_nearby_donors": len(eligible_donors),
+            "returned": min(len(eligible_donors), limit),
+            "donors": eligible_donors[:limit],
+            "cascade_tiers": {
+                "tier1_count": len(tier1),
+                "tier2_count": len(tier2),
+                "tier3_count": len(tier3),
+                "tier4_count": len(tier4)
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

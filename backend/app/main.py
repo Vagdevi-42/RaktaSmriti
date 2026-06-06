@@ -4,6 +4,8 @@ from .routes import health, donor_api, match, coordinator, ghost_donor, predicti
 from .routes import ghost_donor
 from .routes import whatsapp_webhook
 from .routes import donation_request
+from .routes import patient_prediction
+
 app = FastAPI(title="RaktaSmriti API")
 
 app.add_middleware(
@@ -23,6 +25,7 @@ app.include_router(ghost_donor.router)
 app.include_router(donation_request.router)
 app.include_router(prediction.router)
 app.include_router(whatsapp_webhook.router)
+app.include_router(patient_prediction.router)
 
 
 @app.get("/")

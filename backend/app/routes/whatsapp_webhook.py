@@ -4,8 +4,9 @@ from twilio.rest import Client
 
 router = APIRouter(prefix="/api/whatsapp", tags=["whatsapp"])
 
+# YOUR CORRECT CREDENTIALS
 TWILIO_ACCOUNT_SID = "ACe74c319d295d672ea021bd93974e9773"
-TWILIO_AUTH_TOKEN = "dc5fdb0f8cbce7ee447465eabfd8244e"
+TWILIO_AUTH_TOKEN = "9f43abc6aa023271c3165e9a20639c1e"
 TWILIO_WHATSAPP_NUMBER = "whatsapp:+14155238886"
 
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
@@ -36,7 +37,7 @@ async def whatsapp_webhook(request: Request):
         print(f"📱 Donor replied: '{reply}'")
         
         if reply == 'YES':
-            # Message 1: Donor confirmation with FULL details
+            # Message 1: Donor confirmation
             donor_msg = f"""✅ *DONATION CONFIRMED!*
 
 Thank you for saving a life!
