@@ -7,6 +7,7 @@ from flask_bcrypt import Bcrypt
 from .config import config
 import os
 
+
 # Initialize extensions
 db = SQLAlchemy()
 migrate = Migrate()
@@ -41,13 +42,21 @@ def create_app(config_name='default'):
     except ImportError as e:
         print(f"User routes not ready yet: {e}")
     
-    # 👇 ADD THIS BLOCK - Register donation routes
+    # Register donation routes
     try:
         from app.routes.donation_routes import donation_bp
         app.register_blueprint(donation_bp, url_prefix='/api')
         print("✅ Donation routes registered")
     except ImportError as e:
         print(f"Donation routes not ready yet: {e}")
+    
+    # 👇 ADD THIS BLOCK - Register donor routes
+    try:
+        from app.routes.donor_routes import donor_bp
+        app.register_blueprint(donor_bp, url_prefix='/api')
+        print("✅ Donor routes registered")
+    except ImportError as e:
+        print(f"Donor routes not ready yet: {e}")
     
     @app.route('/health', methods=['GET'])
     def health_check():

@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Initialize DynamoDB client
 dynamodb = boto3.resource(
     'dynamodb',
     region_name=os.environ.get('AWS_REGION', 'us-east-1'),
@@ -12,56 +11,64 @@ dynamodb = boto3.resource(
     aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY')
 )
 
-# Use your existing table
 users_table = dynamodb.Table('team81-user')
 
 class UserModel:
     
     @staticmethod
-    def find_by_user_id(user_id):
-        """Find a user by user_id (Partition Key)"""
-        try:
-            response = users_table.get_item(Key={'user_id': user_id})
-            return response.get('Item')
-        except Exception as e:
-            print(f"Error finding user: {e}")
-            return None
-    
-    @staticmethod
-    def scan_all(limit=100):
-        """Get all users (use carefully)"""
+    def get_all_users(limit=100):
         try:
             response = users_table.scan(Limit=limit)
             return response.get('Items', [])
         except Exception as e:
-            print(f"Error scanning users: {e}")
+            print(f"Error: {e}")
             return []
     
     @staticmethod
     def get_donors_by_blood_group(blood_group):
-        """Get donors by blood group"""
+        """Get Emergency Donors by blood group"""
         try:
+            # First get all Emergency Donors
             response = users_table.scan(
-                FilterExpression='blood_group = :blood_group AND role = :role',
-                ExpressionAttributeValues={
-                    ':blood_group': blood_group,
-                    ':role': 'Emergency Donor'
-                }
+                FilterExpression='role = :role',
+                ExpressionAttributeValues={':role': 'Emergency Donor'}
             )
-            return response.get('Items', [])
+            all_donors = response.get('Items', [])
+            
+            # Filter by blood group in Python (more reliable)
+            filtered = []
+            for donor in all_donors:
+                if donor.get('blood_group') == blood_group:
+                    filtered.append(donor)
+            
+            return filtered
         except Exception as e:
-            print(f"Error finding donors: {e}")
+            print(f"Error: {e}")
             return []
     
     @staticmethod
-    def get_eligible_donors():
-        """Get all eligible donors"""
+    def get_donation_stats():
         try:
-            response = users_table.scan(
-                FilterExpression='eligibility_status = :status',
-                ExpressionAttributeValues={':status': 'eligible'}
-            )
-            return response.get('Items', [])
+            users = UserModel.get_all_users(500)
+            
+            total_donors = 0
+            eligible_donors = 0
+            blood_group_count = {}
+            
+            for user in users:
+                if user.get('role') == 'Emergency Donor':
+                    total_donors += 1
+                    if user.get('eligibility_status') == 'eligible':
+                        eligible_donors += 1
+                    
+                    bg = user.get('blood_group', 'Unknown')
+                    blood_group_count[bg] = blood_group_count.get(bg, 0) + 1
+            
+            return {
+                'total_donors': total_donors,
+                'eligible_donors': eligible_donors,
+                'blood_group_distribution': blood_group_count
+            }
         except Exception as e:
-            print(f"Error finding eligible donors: {e}")
-            return []
+            print(f"Error: {e}")
+            return {}
