@@ -14,6 +14,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [checkedInDonors, setCheckedInDonors] = useState({});
+  const [ghostQr, setGhostQr] = useState(null);
+  const [ghostLoading, setGhostLoading] = useState(false);
 
   const fetchStats = async () => {
     try {
@@ -101,11 +103,31 @@ function App() {
     setLoading(false);
   };
 
+  const fetchGhostQr = async () => {
+    setGhostLoading(true);
+    try {
+      const res = await axios.get(API_URL + '/ghost/qr/demo-campaign');
+      setGhostQr(res.data);
+      await fetchStats();
+    } catch (error) {
+      console.log('Error fetching ghost donor QR:', error);
+      setMessage('Error fetching ghost donor QR');
+    }
+    setGhostLoading(false);
+  };
+
   useEffect(() => {
     fetchStats();
     fetchNearbyDonors();
     fetchShortage();
     fetchPatients();
+    fetchGhostQr();
+
+    const statsTimer = setInterval(() => {
+      fetchStats();
+    }, 10000);
+
+    return () => clearInterval(statsTimer);
   }, []);
 
   const handleBloodGroupChange = (bg) => {
@@ -176,10 +198,42 @@ function App() {
           <button onClick={sendDonationRequest} style={{ backgroundColor: '#d32f2f', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer' }}>
             Send Donation Request
           </button>
-          <button onClick={fetchNearbyDonors} style={{ backgroundColor: '#2196f3', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer' }}>
+          <button
+            onClick={async () => {
+              await fetchNearbyDonors();
+              await fetchStats();
+            }}
+            style={{ backgroundColor: '#2196f3', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer' }}
+          >
             Refresh Donors
           </button>
         </div>
+      </div>
+
+      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '10px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+        <h3>Ghost Donor QR Registration</h3>
+        <p style={{ color: '#555' }}>Generate a WhatsApp registration QR for emergency donor signup.</p>
+        <button onClick={fetchGhostQr} style={{ backgroundColor: '#7b1fa2', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '5px', cursor: 'pointer', marginBottom: '12px' }}>
+          Refresh QR
+        </button>
+        {ghostLoading ? <p>Loading QR...</p> : ghostQr?.qr_code_base64 ? (
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <img
+              src={`data:image/png;base64,${ghostQr.qr_code_base64}`}
+              alt="Ghost donor registration QR"
+              style={{ width: '220px', height: '220px', border: '1px solid #ddd', borderRadius: '8px', background: 'white' }}
+            />
+            <div style={{ maxWidth: '420px' }}>
+              <p><strong>Registration ID:</strong> {ghostQr.registration_id}</p>
+              <p><strong>WhatsApp link:</strong></p>
+              <a href={ghostQr.whatsapp_link} target="_blank" rel="noreferrer" style={{ color: '#1565c0', wordBreak: 'break-all' }}>
+                {ghostQr.whatsapp_link}
+              </a>
+              <p style={{ color: '#666', marginTop: '8px' }}>{ghostQr.instructions}</p>
+            </div>
+          </div>
+        ) : <p>No QR generated yet.</p>}
+
       </div>
 
       <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '10px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>

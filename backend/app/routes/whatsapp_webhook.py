@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Request, HTTPException
 from twilio.rest import Client
 from ..config import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMBER, PATIENT_WHATSAPP_NUMBER
+from .ghost_donor import register_ghost_donor_from_message
 
 router = APIRouter(prefix="/api/whatsapp", tags=["whatsapp"])
 
@@ -45,11 +46,19 @@ def send_whatsapp(to_number, message):
 async def whatsapp_webhook(request: Request):
     try:
         form = await request.form()
-        reply = (form.get('Body') or '').upper().strip()
+        body = (form.get('Body') or '').strip()
+        reply = body.upper().strip()
         from_number = normalize_whatsapp_number(form.get('From'))
         
-        print(f"📱 Donor replied: '{reply}' from {from_number}")
-        
+        print(f"📱 Incoming WhatsApp message: '{body}' from {from_number}")
+
+        # Registration messages from the QR flow should create/update ghost donor records.
+        if 'register' in body.lower() or 'blood donor' in body.lower():
+            result = register_ghost_donor_from_message(from_number, body)
+            if result.get('success'):
+                send_whatsapp(from_number, "🩸 Your ghost donor registration was received successfully. The coordinator dashboard will update shortly.")
+            return {"success": result.get('success', False), "message": result.get('message'), "donor_id": result.get('donor_id')}
+
         if reply == 'YES':
             # Message 1: Donor confirmation
             donor_msg = f"""✅ *DONATION CONFIRMED!*

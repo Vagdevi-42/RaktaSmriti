@@ -1,16 +1,71 @@
 # backend/app/routes/ghost_donor.py - COMPLETE WORKING VERSION
 from fastapi import APIRouter, HTTPException, Request, Response
+from typing import Optional
 import boto3
 import uuid
 import qrcode
+import re
 from io import BytesIO
 import base64
 from datetime import datetime
+import urllib.parse
 
 router = APIRouter(prefix="/api/ghost", tags=["ghost_donor"])
 
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table('team81-user')
+
+DEFAULT_GHOST_NAME = 'Guest Ghost Donor'
+DEFAULT_GHOST_PHONE = '+919876543210'
+DEFAULT_GHOST_BLOOD_GROUP = 'O Positive'
+
+
+def build_registration_message(reg_id: str) -> str:
+    """Build the WhatsApp prefilled message used by the QR flow."""
+    return (
+        f"I want to register as blood donor {reg_id} "
+        f"{DEFAULT_GHOST_NAME} {DEFAULT_GHOST_PHONE} {DEFAULT_GHOST_BLOOD_GROUP}"
+    )
+
+
+def extract_registration_details(body: str):
+    """Extract the registration id and hardcoded defaults from the WhatsApp message."""
+    cleaned = (body or '').strip()
+    match = re.search(r"blood donor\s+([A-Za-z0-9_-]+)", cleaned, re.IGNORECASE)
+    reg_id = match.group(1) if match else None
+    return {
+        'reg_id': reg_id,
+        'name': DEFAULT_GHOST_NAME,
+        'phone_number': DEFAULT_GHOST_PHONE,
+        'blood_group': DEFAULT_GHOST_BLOOD_GROUP,
+    }
+
+
+def register_ghost_donor_from_message(from_number: str, body: str):
+    """Create or update a ghost donor record from an inbound WhatsApp registration message."""
+    details = extract_registration_details(body)
+    reg_id = details['reg_id']
+
+    if not reg_id:
+        return {"success": False, "message": "Missing registration id in WhatsApp message"}
+
+    donor_id = f"GHOST_{reg_id}"
+    table.put_item(
+        Item={
+            'user_id': donor_id,
+            'role': 'Ghost_Donor',
+            'status': 'pending_medical',
+            'name': details['name'],
+            'phone_number': details['phone_number'] or from_number,
+            'blood_group': details['blood_group'],
+            'campaign_id': 'whatsapp-registration',
+            'registration_time': datetime.now().isoformat(),
+            'registration_complete': datetime.now().isoformat(),
+            'source': 'whatsapp'
+        }
+    )
+
+    return {"success": True, "message": "Ghost donor registration recorded from WhatsApp", "donor_id": donor_id}
 
 def get_value(item, key):
     if key in item:
@@ -23,7 +78,7 @@ def get_value(item, key):
 @router.get("/qr/{campaign_id}")
 async def generate_qr_registration(campaign_id: str):
     reg_id = str(uuid.uuid4())[:8]
-    
+
     table.put_item(
         Item={
             'user_id': f"GHOST_{reg_id}",
@@ -33,8 +88,8 @@ async def generate_qr_registration(campaign_id: str):
             'registration_time': datetime.now().isoformat()
         }
     )
-    
-    whatsapp_link = f"https://wa.me/14155238886?text=I%20want%20to%20register%20as%20blood%20donor%20{reg_id}"
+
+    whatsapp_link = "https://wa.me/14155238886?text=" + urllib.parse.quote(build_registration_message(reg_id))
     
     qr = qrcode.QRCode(box_size=10, border=4)
     qr.add_data(whatsapp_link)
@@ -56,7 +111,7 @@ async def generate_qr_registration(campaign_id: str):
 @router.get("/qr-image/{campaign_id}")
 async def get_qr_image(campaign_id: str):
     reg_id = str(uuid.uuid4())[:8]
-    
+
     table.put_item(
         Item={
             'user_id': f"GHOST_{reg_id}",
@@ -66,8 +121,8 @@ async def get_qr_image(campaign_id: str):
             'registration_time': datetime.now().isoformat()
         }
     )
-    
-    whatsapp_link = f"https://wa.me/14155238886?text=I%20want%20to%20register%20as%20blood%20donor%20{reg_id}"
+
+    whatsapp_link = "https://wa.me/14155238886?text=" + urllib.parse.quote(build_registration_message(reg_id))
     
     qr = qrcode.QRCode(box_size=10, border=4)
     qr.add_data(whatsapp_link)
@@ -78,6 +133,19 @@ async def get_qr_image(campaign_id: str):
     img.save(buffered, format="PNG")
     
     return Response(content=buffered.getvalue(), media_type="image/png")
+
+@router.post("/whatsapp-register")
+async def whatsapp_register_ghost_donor(request: Request):
+    """Create/update a ghost donor row when the WhatsApp registration message arrives."""
+    try:
+        form = await request.form()
+        from_number = str(form.get('From', '')).replace('whatsapp:', '').strip()
+        body = str(form.get('Body', '')).strip()
+        result = register_ghost_donor_from_message(from_number, body)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/register")
 async def register_ghost_donor(request: Request):
