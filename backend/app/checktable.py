@@ -1,26 +1,41 @@
+# backend/check_table.py
 import boto3
-import os
-from dotenv import load_dotenv
+from botocore.exceptions import ClientError
 
-load_dotenv()
+def check_table():
+    try:
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table('team81-user')
+        
+        # Check if table exists
+        status = table.table_status
+        print(f"✅ Table 'team81-user' exists!")
+        print(f"   Status: {status}")
+        
+        # Scan to see data
+        response = table.scan(Limit=5)
+        items = response.get('Items', [])
+        
+        print(f"\n📊 Found {len(items)} items in scan")
+        
+        if len(items) > 0:
+            print("\n📋 Sample data:")
+            for item in items[:2]:
+                print(f"   user_id: {item.get('user_id', 'N/A')[:30]}...")
+                print(f"   role: {item.get('role', 'N/A')}")
+                print(f"   blood_group: {item.get('blood_group', 'N/A')}")
+                print("   ---")
+        else:
+            print("\n⚠️ Table is empty. Need to load data.")
+            
+        return True
+        
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            print("❌ Table 'team81-user' does not exist!")
+        else:
+            print(f"❌ Error: {e}")
+        return False
 
-dynamodb = boto3.resource(
-    'dynamodb',
-    region_name=os.environ.get('AWS_REGION', 'us-east-1'),
-    aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-    aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY')
-)
-
-table = dynamodb.Table('team81-user')
-
-# Scan first 5 items to see structure
-response = table.scan(Limit=5)
-items = response.get('Items', [])
-
-print(f"Found {len(items)} sample items\n")
-
-for item in items:
-    print("Item structure:")
-    for key, value in item.items():
-        print(f"  {key}: {value}")
-    print("-" * 50)
+if __name__ == "__main__":
+    check_table()
