@@ -16,6 +16,8 @@ function App() {
   const [checkedInDonors, setCheckedInDonors] = useState({});
   const [ghostQr, setGhostQr] = useState(null);
   const [ghostLoading, setGhostLoading] = useState(false);
+  const [demoTrigger, setDemoTrigger] = useState(null);
+  const [demoLoading, setDemoLoading] = useState(false);
 
   const fetchStats = async () => {
     try {
@@ -114,6 +116,19 @@ function App() {
       setMessage('Error fetching ghost donor QR');
     }
     setGhostLoading(false);
+  };
+
+  const runDemoTrigger = async () => {
+    setDemoLoading(true);
+    try {
+      const res = await axios.get(API_URL + '/predict/trigger/' + selectedBloodGroup + '?days_ahead=7&demo_mode=true');
+      setDemoTrigger(res.data);
+      setMessage('Demo auto-trigger executed. No real Twilio message was sent.');
+    } catch (error) {
+      console.log('Error running demo trigger:', error);
+      setMessage('Error running demo trigger');
+    }
+    setDemoLoading(false);
   };
 
   useEffect(() => {
@@ -234,6 +249,22 @@ function App() {
           </div>
         ) : <p>No QR generated yet.</p>}
 
+      </div>
+
+      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '10px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+        <h3>AI Auto-Trigger Demo</h3>
+        <p style={{ color: '#555' }}>This button shows the automatic prediction/trigger flow in the UI without sending real WhatsApp messages.</p>
+        <button onClick={runDemoTrigger} style={{ backgroundColor: '#0d47a1', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '5px', cursor: 'pointer', marginBottom: '10px' }}>
+          {demoLoading ? 'Running Demo...' : 'Run Demo Auto-Trigger'}
+        </button>
+        {demoTrigger && (
+          <div style={{ backgroundColor: '#eef4ff', padding: '10px', borderRadius: '6px' }}>
+            <p><strong>Message:</strong> {demoTrigger.message}</p>
+            <p><strong>Patients needing:</strong> {demoTrigger.patients_needing}</p>
+            <p><strong>Urgent count:</strong> {demoTrigger.urgent_count}</p>
+            <p><strong>Action:</strong> {demoTrigger.action}</p>
+          </div>
+        )}
       </div>
 
       <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '10px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>

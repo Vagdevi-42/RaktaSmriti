@@ -99,10 +99,10 @@ async def predict_patients_needing_blood(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/trigger/{blood_group}")
-async def auto_trigger_donation(blood_group: str, days_ahead: int = 7):
+async def auto_trigger_donation(blood_group: str, days_ahead: int = 7, demo_mode: bool = False):
     """
-    AI Auto-Trigger: Automatically send donation requests for patients
-    This would be called by a scheduled job (e.g., every morning)
+    AI Auto-Trigger: prepare donation requests for patients.
+    In demo mode it returns the generated message payload without sending real WhatsApp messages.
     """
     try:
         # First, get patients needing this blood group
@@ -113,23 +113,30 @@ async def auto_trigger_donation(blood_group: str, days_ahead: int = 7):
         
         # Count how many patients need this blood group
         patients_needing = prediction.get('blood_group_summary', {}).get(blood_group, 0)
-        
+
         if patients_needing == 0:
             return {
                 "success": True,
+                "demo_mode": demo_mode,
                 "message": f"No patients need {blood_group} blood in next {days_ahead} days",
-                "patients_needing": 0
+                "patients_needing": 0,
+                "urgent_count": prediction.get('urgent_patients', 0),
+                "action": "Demo mode only: no real Twilio message is sent." if demo_mode else "Would automatically trigger donation requests to nearby donors"
             }
-        
-        # Here you would call your donation request API
-        # For demo, we return the summary
+
+        demo_message = (
+            f"AI Prediction demo: {patients_needing} patient(s) need {blood_group} blood in next {days_ahead} days. "
+            "This response is for demonstration only; Twilio is not called in demo mode."
+        )
+
         return {
             "success": True,
-            "message": f"AI Prediction: {patients_needing} patient(s) need {blood_group} blood in next {days_ahead} days",
+            "demo_mode": demo_mode,
+            "message": demo_message if demo_mode else f"AI Prediction: {patients_needing} patient(s) need {blood_group} blood in next {days_ahead} days",
             "patients_needing": patients_needing,
             "urgent_count": prediction.get('urgent_patients', 0),
-            "action": "Would automatically trigger donation requests to nearby donors",
-            "next_step": f"Call /api/donation/send-to-nearby?blood_group={blood_group} to send requests"
+            "action": "Demo mode only: no real Twilio message is sent." if demo_mode else "Would automatically trigger donation requests to nearby donors",
+            "next_step": f"Call /api/donation/send-to-nearby?blood_group={blood_group} to send requests" if not demo_mode else "Use demo mode to show the prediction flow without consuming Twilio credits"
         }
         
     except Exception as e:
