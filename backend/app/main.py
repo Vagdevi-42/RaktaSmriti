@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routes import health, donor_api, match, coordinator, ghost_donor, prediction
-
+from .routes import ghost_donor
 app = FastAPI(title="RaktaSmriti API")
 
 app.add_middleware(
@@ -19,6 +19,7 @@ app.include_router(match.router)
 app.include_router(coordinator.router)
 app.include_router(ghost_donor.router)
 app.include_router(prediction.router)
+
 
 @app.get("/")
 async def root():
