@@ -1,7 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+const getApiBaseUrl = () => {
+  const configured = (process.env.REACT_APP_API_URL || '').trim().replace(/\/+$/, '');
+  if (configured) return configured;
+
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return '/api';
+  }
+
+  return 'http://localhost:8000/api';
+};
+
+const API_URL = getApiBaseUrl();
 
 function App() {
   const [stats, setStats] = useState(null);
@@ -21,16 +32,16 @@ function App() {
   const [liveTrigger, setLiveTrigger] = useState(null);
   const [liveTriggerLoading, setLiveTriggerLoading] = useState(false);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const res = await axios.get(API_URL + '/coordinator/statistics');
       setStats(res.data);
     } catch (error) {
       console.log('Error fetching stats:', error);
     }
-  };
+  }, []);
 
-  const fetchNearbyDonors = async () => {
+  const fetchNearbyDonors = useCallback(async () => {
     setLoading(true);
     try {
       const res = await axios.get(API_URL + '/match/donors/nearby', {
@@ -47,18 +58,18 @@ function App() {
       setMessage('Error fetching donors');
     }
     setLoading(false);
-  };
+  }, [maxDistance, selectedBloodGroup]);
 
-  const fetchShortage = async () => {
+  const fetchShortage = useCallback(async () => {
     try {
       const res = await axios.get(API_URL + '/predict/shortage/' + selectedBloodGroup);
       setShortage(res.data);
     } catch (error) {
       console.log('Error fetching shortage:', error);
     }
-  };
+  }, [selectedBloodGroup]);
 
-  const fetchPatients = async () => {
+  const fetchPatients = useCallback(async () => {
     try {
       const res = await axios.get(API_URL + '/predict/patients?days_ahead=7');
       setPatients(res.data.upcoming_list || []);
@@ -66,7 +77,7 @@ function App() {
     } catch (error) {
       console.log('Error fetching patients:', error);
     }
-  };
+  }, []);
 
   const markCheckin = async (donorId, showedUp) => {
     try {
@@ -107,7 +118,7 @@ function App() {
     setLoading(false);
   };
 
-  const fetchGhostQr = async () => {
+  const fetchGhostQr = useCallback(async () => {
     setGhostLoading(true);
     try {
       const res = await axios.get(API_URL + '/ghost/qr/demo-campaign');
@@ -118,7 +129,7 @@ function App() {
       setMessage('Error fetching ghost donor QR');
     }
     setGhostLoading(false);
-  };
+  }, [fetchStats]);
 
   const runDemoTrigger = async () => {
     setDemoLoading(true);
@@ -158,7 +169,7 @@ function App() {
     }, 10000);
 
     return () => clearInterval(statsTimer);
-  }, []);
+  }, [fetchGhostQr, fetchNearbyDonors, fetchPatients, fetchShortage, fetchStats]);
 
   const handleBloodGroupChange = (bg) => {
     setSelectedBloodGroup(bg);
