@@ -9,6 +9,29 @@ import boto3
 router = APIRouter(prefix="/api/donation", tags=["donation"])
 
 
+def normalize_blood_group(blood_group: str) -> str:
+    """Normalize standard blood-group labels used by donors and prediction results."""
+    aliases = {
+        "o+": "O Positive",
+        "o positive": "O Positive",
+        "o-": "O Negative",
+        "o negative": "O Negative",
+        "a+": "A Positive",
+        "a positive": "A Positive",
+        "a-": "A Negative",
+        "a negative": "A Negative",
+        "b+": "B Positive",
+        "b positive": "B Positive",
+        "b-": "B Negative",
+        "b negative": "B Negative",
+        "ab+": "AB Positive",
+        "ab positive": "AB Positive",
+        "ab-": "AB Negative",
+        "ab negative": "AB Negative",
+    }
+    return aliases.get((blood_group or "").strip().lower(), (blood_group or "").strip())
+
+
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 # DynamoDB
@@ -108,6 +131,8 @@ async def send_to_nearby_donors(
     Follows cascade logic: Tier 1 first, then Tier 2, etc.
     """
     try:
+        normalized_blood_group = normalize_blood_group(blood_group)
+
         # Step 1: Get hospital details
         hospital_resp = table.get_item(Key={'user_id': hospital_id})
         hospital = hospital_resp.get('Item')
@@ -129,7 +154,7 @@ async def send_to_nearby_donors(
             donor_status = donor.get('status', '')
             donor_eligibility = donor.get('eligibility_status', '')
             
-            if (donor_bg == blood_group and 
+            if (donor_bg == normalized_blood_group and 
                 donor_status == 'active' and 
                 donor_eligibility == 'eligible'):
                 
@@ -199,7 +224,7 @@ Reply:
         return {
             "success": True,
             "hospital": hospital.get('name'),
-            "blood_group": blood_group,
+            "blood_group": normalized_blood_group,
             "max_distance_km": max_distance_km,
             "total_nearby_donors": total,
             "cascade": {

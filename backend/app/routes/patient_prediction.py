@@ -1,8 +1,10 @@
 # backend/app/routes/patient_prediction.py
 from fastapi import APIRouter, HTTPException, Query
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import defaultdict
 import boto3
+
+from .donation_request import send_to_nearby_donors
 
 router = APIRouter(prefix="/api/predict", tags=["prediction"])
 
@@ -18,10 +20,37 @@ def get_value(item, key):
         return str(val)
     return None
 
+def _normalize_blood_group(blood_group: str) -> str:
+    """Normalize common blood-group aliases to match donor records."""
+    aliases = {
+        "o+": "O Positive",
+        "o positive": "O Positive",
+        "o-": "O Negative",
+        "o negative": "O Negative",
+        "a+": "A Positive",
+        "a positive": "A Positive",
+        "a-": "A Negative",
+        "a negative": "A Negative",
+        "b+": "B Positive",
+        "b positive": "B Positive",
+        "b-": "B Negative",
+        "b negative": "B Negative",
+        "ab+": "AB Positive",
+        "ab positive": "AB Positive",
+        "ab-": "AB Negative",
+        "ab negative": "AB Negative",
+    }
+    return aliases.get((blood_group or "").strip().lower(), (blood_group or "").strip())
+
+
 @router.get("/patients")
 async def predict_patients_needing_blood(
     days_ahead: int = Query(7, ge=1, le=30, description="Look ahead X days"),
-    include_overdue: bool = Query(True, description="Include overdue patients")
+    include_overdue: bool = Query(True, description="Include overdue patients"),
+    auto_trigger: bool = Query(False, description="Automatically send donation requests for predicted blood groups"),
+    hospital_id: str = Query("HOSPITAL_CITY", description="Hospital id used for auto-trigger"),
+    max_distance_km: float = Query(5, ge=1, le=50, description="Donor radius for auto-trigger"),
+    donation_time: str = Query("Tomorrow, 10:00 AM", description="Donation time text shown to donors")
 ):
     """
     AI Prediction: Find patients who will need blood in next X days
@@ -82,8 +111,8 @@ async def predict_patients_needing_blood(
         # Sort by urgency (closest first)
         need_blood.sort(key=lambda x: x['days_until'])
         urgent.sort(key=lambda x: x['days_until'])  # Most overdue first
-        
-        return {
+
+        response = {
             "success": True,
             "days_ahead": days_ahead,
             "total_patients_scanned": len([i for i in all_items if 'Patient' in get_value(i, 'role')]),
@@ -94,6 +123,28 @@ async def predict_patients_needing_blood(
             "upcoming_list": need_blood[:20],
             "message": f"Found {len(urgent)} urgent and {len(need_blood)} upcoming patients needing blood"
         }
+
+        if auto_trigger:
+            triggered_requests = []
+            for blood_group_name, patients_needing in blood_group_summary.items():
+                if patients_needing <= 0:
+                    continue
+                normalized_group = _normalize_blood_group(blood_group_name)
+                send_result = await send_to_nearby_donors(
+                    blood_group=normalized_group,
+                    hospital_id=hospital_id,
+                    max_distance_km=max_distance_km,
+                    donation_time=donation_time
+                )
+                triggered_requests.append({
+                    "blood_group": normalized_group,
+                    "patients_needing": patients_needing,
+                    "result": send_result
+                })
+            response["auto_triggered"] = True
+            response["triggered_requests"] = triggered_requests
+
+        return response
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -129,14 +180,33 @@ async def auto_trigger_donation(blood_group: str, days_ahead: int = 7, demo_mode
             "This response is for demonstration only; Twilio is not called in demo mode."
         )
 
+        if demo_mode:
+            return {
+                "success": True,
+                "demo_mode": True,
+                "message": demo_message,
+                "patients_needing": patients_needing,
+                "urgent_count": prediction.get('urgent_patients', 0),
+                "action": "Demo mode only: no real Twilio message is sent.",
+                "next_step": "Use demo mode to show the prediction flow without consuming Twilio credits"
+            }
+
+        send_result = await send_to_nearby_donors(
+            blood_group=blood_group,
+            hospital_id="HOSPITAL_CITY",
+            max_distance_km=5,
+            donation_time="Tomorrow, 10:00 AM"
+        )
+
         return {
-            "success": True,
-            "demo_mode": demo_mode,
-            "message": demo_message if demo_mode else f"AI Prediction: {patients_needing} patient(s) need {blood_group} blood in next {days_ahead} days",
+            "success": send_result.get('success', False),
+            "demo_mode": False,
+            "message": f"AI Prediction: {patients_needing} patient(s) need {blood_group} blood in next {days_ahead} days",
             "patients_needing": patients_needing,
             "urgent_count": prediction.get('urgent_patients', 0),
-            "action": "Demo mode only: no real Twilio message is sent." if demo_mode else "Would automatically trigger donation requests to nearby donors",
-            "next_step": f"Call /api/donation/send-to-nearby?blood_group={blood_group} to send requests" if not demo_mode else "Use demo mode to show the prediction flow without consuming Twilio credits"
+            "action": "Triggered nearby donor WhatsApp requests",
+            "twilio": send_result,
+            "next_step": "Check the Twilio logs or donor replies to continue the donation flow"
         }
         
     except Exception as e:

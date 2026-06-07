@@ -5,7 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables from backend/.env, regardless of the current shell directory.
-load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 # ============================================================
 # Twilio Configuration

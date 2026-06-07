@@ -18,6 +18,8 @@ function App() {
   const [ghostLoading, setGhostLoading] = useState(false);
   const [demoTrigger, setDemoTrigger] = useState(null);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [liveTrigger, setLiveTrigger] = useState(null);
+  const [liveTriggerLoading, setLiveTriggerLoading] = useState(false);
 
   const fetchStats = async () => {
     try {
@@ -129,6 +131,19 @@ function App() {
       setMessage('Error running demo trigger');
     }
     setDemoLoading(false);
+  };
+
+  const runLiveTrigger = async () => {
+    setLiveTriggerLoading(true);
+    try {
+      const res = await axios.get(API_URL + '/predict/trigger/' + selectedBloodGroup + '?days_ahead=7&demo_mode=false');
+      setLiveTrigger(res.data);
+      setMessage('Live auto-trigger executed. Donor WhatsApp requests were sent if eligible donors were found.');
+    } catch (error) {
+      console.log('Error running live trigger:', error);
+      setMessage('Error running live auto-trigger');
+    }
+    setLiveTriggerLoading(false);
   };
 
   useEffect(() => {
@@ -252,17 +267,32 @@ function App() {
       </div>
 
       <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '10px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-        <h3>AI Auto-Trigger Demo</h3>
-        <p style={{ color: '#555' }}>This button shows the automatic prediction/trigger flow in the UI without sending real WhatsApp messages.</p>
-        <button onClick={runDemoTrigger} style={{ backgroundColor: '#0d47a1', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '5px', cursor: 'pointer', marginBottom: '10px' }}>
-          {demoLoading ? 'Running Demo...' : 'Run Demo Auto-Trigger'}
-        </button>
+        <h3>AI Auto-Trigger</h3>
+        <p style={{ color: '#555' }}>Use this to show the prediction → donor alert flow in the dashboard. The demo button keeps Twilio disabled; the live button uses the real trigger path.</p>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
+          <button onClick={runDemoTrigger} style={{ backgroundColor: '#0d47a1', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '5px', cursor: 'pointer' }}>
+            {demoLoading ? 'Running Demo...' : 'Run Demo Auto-Trigger'}
+          </button>
+          <button onClick={runLiveTrigger} style={{ backgroundColor: '#d32f2f', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '5px', cursor: 'pointer' }}>
+            {liveTriggerLoading ? 'Running Live Trigger...' : 'Run Live Auto-Trigger'}
+          </button>
+        </div>
+
         {demoTrigger && (
-          <div style={{ backgroundColor: '#eef4ff', padding: '10px', borderRadius: '6px' }}>
-            <p><strong>Message:</strong> {demoTrigger.message}</p>
+          <div style={{ backgroundColor: '#eef4ff', padding: '10px', borderRadius: '6px', marginBottom: '10px' }}>
+            <p><strong>Demo message:</strong> {demoTrigger.message}</p>
             <p><strong>Patients needing:</strong> {demoTrigger.patients_needing}</p>
             <p><strong>Urgent count:</strong> {demoTrigger.urgent_count}</p>
             <p><strong>Action:</strong> {demoTrigger.action}</p>
+          </div>
+        )}
+
+        {liveTrigger && (
+          <div style={{ backgroundColor: '#fff3e0', padding: '10px', borderRadius: '6px' }}>
+            <p><strong>Live trigger result:</strong> {liveTrigger.message}</p>
+            <p><strong>Patients needing:</strong> {liveTrigger.patients_needing}</p>
+            <p><strong>Urgent count:</strong> {liveTrigger.urgent_count}</p>
+            <p><strong>Twilio action:</strong> {liveTrigger.action}</p>
           </div>
         )}
       </div>
