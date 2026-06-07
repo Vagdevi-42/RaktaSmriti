@@ -2,13 +2,14 @@
 from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
 from collections import defaultdict
+import os
 import boto3
 
 from .donation_request import send_to_nearby_donors
 
 router = APIRouter(prefix="/api/predict", tags=["prediction"])
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 table = dynamodb.Table('team81-user')
 
 def get_value(item, key):

@@ -1,4 +1,9 @@
 # backend/app/__init__.py
+import os
+
+os.environ.setdefault("AWS_REGION", "us-east-1")
+os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+
 from fastapi import FastAPI
 from .routes import donor_api
 

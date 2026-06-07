@@ -1,5 +1,6 @@
 # backend/app/routes/coordinator.py
 from fastapi import APIRouter, HTTPException
+import os
 import boto3
 from datetime import datetime, timedelta
 import json
@@ -7,7 +8,7 @@ from ..config import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMB
 
 router = APIRouter(prefix="/api/coordinator", tags=["coordinator"])
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 table = dynamodb.Table('team81-user')
 
 # Twilio credentials for WhatsApp

@@ -1,12 +1,13 @@
 # backend/app/routes/prediction.py - FIXED VERSION
 from fastapi import APIRouter, HTTPException
+import os
 import boto3
 from datetime import datetime, timedelta
 from collections import defaultdict
 
 router = APIRouter(prefix="/api/predict", tags=["prediction"])
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 table = dynamodb.Table('team81-user')
 
 def get_value(item, key):

@@ -1,6 +1,7 @@
 # backend/app/routes/ghost_donor.py - COMPLETE WORKING VERSION
 from fastapi import APIRouter, HTTPException, Request, Response
 from typing import Optional
+import os
 import boto3
 import uuid
 import qrcode
@@ -12,7 +13,7 @@ import urllib.parse
 
 router = APIRouter(prefix="/api/ghost", tags=["ghost_donor"])
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 table = dynamodb.Table('team81-user')
 
 DEFAULT_GHOST_NAME = 'Guest Ghost Donor'

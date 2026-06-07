@@ -1,11 +1,12 @@
 # backend/app/services/cascade_service.py
+import os
 import boto3
 from datetime import datetime, timedelta
 import math
 from .update_service import mark_donor_response
 from .whatsapp_service import send_donation_request
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 table = dynamodb.Table('team81-user')
 
 def get_eligible_donors(blood_group, required_units=1):

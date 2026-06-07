@@ -1,7 +1,8 @@
 # backend/app/services/hospital_service.py
+import os
 import boto3
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 table = dynamodb.Table('team81-user')
 
 def get_hospital_from_db(hospital_id="HOSPITAL_CITY"):

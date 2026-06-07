@@ -4,6 +4,7 @@ from twilio.rest import Client
 from datetime import datetime
 from math import radians, sin, cos, sqrt, atan2
 from ..config import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMBER
+import os
 import boto3
 
 router = APIRouter(prefix="/api/donation", tags=["donation"])
@@ -35,7 +36,7 @@ def normalize_blood_group(blood_group: str) -> str:
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 # DynamoDB
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 table = dynamodb.Table('team81-user')
 
 def calculate_distance(lat1, lon1, lat2, lon2):

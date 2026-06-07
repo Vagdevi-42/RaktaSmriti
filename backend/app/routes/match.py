@@ -1,12 +1,13 @@
 # backend/app/routes/match.py - COMPLETE REPLACEMENT
 from fastapi import APIRouter, HTTPException, Query
+import os
 import boto3
 import math
 from datetime import datetime
 from datetime import datetime, timedelta  # Add this
 router = APIRouter(prefix="/api/match", tags=["matching"])
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 table = dynamodb.Table('team81-user')
 
 def get_value(item, key):

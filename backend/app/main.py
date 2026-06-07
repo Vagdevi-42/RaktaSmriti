@@ -1,3 +1,8 @@
+import os
+
+os.environ.setdefault("AWS_REGION", "us-east-1")
+os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routes import health, donor_api, match, coordinator, ghost_donor, prediction

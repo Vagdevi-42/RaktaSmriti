@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, Query
+import os
 import boto3
 
 router = APIRouter(prefix="/api/donors", tags=["donors"])
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 table = dynamodb.Table('team81-user')
 
 def get_value(item, key):

@@ -1,9 +1,10 @@
 # backend/app/services/update_service.py
+import os
 import boto3
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 table = dynamodb.Table('team81-user')
 
 def update_donor_after_donation(donor_id, coordinator_verified=True):
