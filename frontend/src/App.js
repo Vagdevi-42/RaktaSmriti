@@ -344,7 +344,7 @@ function App() {
               {donors.map((donor, index) => (
                 <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
                   <td style={{ padding: '10px' }}>{(donor.user_id || '').substring(0, 20)}...</td>
-                  <td style={{ padding: '10px' }}>{donor.distance_km || '?'} km</td>
+                  <td style={{ padding: '10px' }}>{donor.distance_km ?? 0} km</td>
                   <td style={{ padding: '10px' }}>
                     <span style={{ 
                       backgroundColor: donor.reliability_score >= 80 ? '#4caf50' : donor.reliability_score >= 60 ? '#ff9800' : '#f44336',
